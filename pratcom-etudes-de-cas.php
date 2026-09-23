@@ -3,7 +3,7 @@
  * Plugin Name:       Pratcom – Études de cas
  * Plugin URI:        https://pratcom.net/
  * Description:       Adds a "Case Studies" content type, separate from blog posts: sectors, services, project sheet (client, results, testimonial), templates for block and classic themes, WPML ready.
- * Version:           1.1.1
+ * Version:           1.1.2
  * Requires at least: 6.7
  * Requires PHP:      8.0
  * Author:            Pratcom Média
@@ -16,7 +16,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'PEDC_VERSION', '1.1.1' );
+define( 'PEDC_VERSION', '1.1.2' );
 define( 'PEDC_FILE', __FILE__ );
 define( 'PEDC_DIR', plugin_dir_path( __FILE__ ) );
 define( 'PEDC_URL', plugin_dir_url( __FILE__ ) );
