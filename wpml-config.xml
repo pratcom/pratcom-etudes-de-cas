@@ -1,0 +1,33 @@
+<wpml-config>
+	<custom-types>
+		<custom-type translate="1" automatic="1">etude_de_cas</custom-type>
+	</custom-types>
+	<taxonomies>
+		<taxonomy translate="1">etude_secteur</taxonomy>
+		<taxonomy translate="1">etude_service</taxonomy>
+	</taxonomies>
+	<custom-fields>
+		<custom-field action="copy">_pedc_client</custom-field>
+		<custom-field action="copy">_pedc_client_url</custom-field>
+		<custom-field action="copy">_pedc_client_logo</custom-field>
+		<custom-field action="translate">_pedc_period</custom-field>
+		<custom-field action="translate">_pedc_testimonial</custom-field>
+		<custom-field action="translate">_pedc_testimonial_author</custom-field>
+		<custom-field action="translate">_pedc_results</custom-field>
+	</custom-fields>
+	<custom-fields-texts>
+		<key name="_pedc_results">
+			<key name="*">
+				<key name="value" />
+				<key name="label" />
+			</key>
+		</key>
+	</custom-fields-texts>
+	<gutenberg-blocks>
+		<gutenberg-block type="pratcom/fiche-projet" translate="0" />
+		<gutenberg-block type="pratcom/etudes-de-cas" translate="0" />
+		<gutenberg-block type="pratcom/etudes-filtre" translate="0" />
+		<gutenberg-block type="pratcom/etudes-connexes" translate="0" />
+		<gutenberg-block type="pratcom/carte-etude" translate="0" />
+	</gutenberg-blocks>
+</wpml-config>

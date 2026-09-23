@@ -1,0 +1,11 @@
+.pedc-box h4 { margin: 1.5em 0 .25em; }
+.pedc-box__grid { display: grid; grid-template-columns: repeat( auto-fit, minmax( 220px, 1fr ) ); gap: 0 16px; }
+.pedc-box__grid label { display: block; margin-bottom: 4px; }
+.pedc-logo { margin: 1em 0; }
+.pedc-logo strong { display: block; margin-bottom: 4px; }
+.pedc-logo__preview img { display: block; max-width: 120px; height: auto; margin-bottom: 6px; background: #f6f7f7; }
+.pedc-logo__remove { color: #b32d2e; margin-left: 6px; }
+.pedc-results-table { margin-top: 6px; }
+.pedc-results-table th:first-child { width: 28%; }
+.pedc-results-table__actions { width: 32px; text-align: center; }
+.pedc-row-remove { font-size: 20px; line-height: 1; color: #b32d2e; text-decoration: none; }
