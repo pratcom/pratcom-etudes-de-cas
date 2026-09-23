@@ -3,7 +3,7 @@ Contributors: pratcom
 Requires at least: 6.7
 Tested up to: 7.1
 Requires PHP: 8.0
-Stable tag: 1.1.0
+Stable tag: 1.1.1
 License: GPLv2 or later
 
 Type de contenu « Études de cas », séparé des articles du blogue.
@@ -38,12 +38,15 @@ La suppression de l'extension retire seulement ses réglages. Les études de cas
 
 == Changelog ==
 
+= 1.1.1 =
+* « Compatible jusqu'à » tient compte des versions correctives (7.1 couvre 7.1.2) : plus d'avertissement « pas testée » dans la fenêtre de détails.
+
 = 1.1.0 =
 * Mises à jour directes depuis WordPress (dépôt GitHub public pratcom/pratcom-etudes-de-cas) : avis « Mise à jour disponible », mises à jour automatiques possibles, lien « Vérifier les mises à jour ».
 * Traductions en fichiers .l10n.php (format natif WordPress 6.5+) au lieu de .mo.
 
 = 1.0.2 =
-* Nouvelle étude : contenu de départ en blocs natifs, 4 sections H2 (Contexte, Le défi, La solution, Les résultats) avec ancres neutres #section-1 à #section-4, paragraphes et listes.
+* Nouvelle étude : contenu de départ en blocs natifs, 4 sections H2 (Le contexte, Le défi, La solution, Les résultats) avec ancres neutres #section-1 à #section-4, paragraphes et listes.
 * Réglage « Étude de cas (page) » : automatique (thème blocs → single.html du thème, thème classique → gabarit du plugin), thème, ou plugin.
 * Quand le thème affiche l'étude, la fiche projet est insérée au-dessus du contenu et le témoignage en dessous (activé par défaut). Aucun titre ajouté, rien n'est enregistré dans le contenu.
 

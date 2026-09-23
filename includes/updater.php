@@ -67,6 +67,18 @@ function remote_info( bool $force = false ): ?array {
 	return $info;
 }
 
+/**
+ * readme.txt says "Tested up to: 7.1"; WordPress compares it with the full
+ * version (7.1.2) and would warn "not tested". Same major.minor = tested.
+ */
+function tested_up_to( string $tested ): string {
+	$wp = get_bloginfo( 'version' );
+	if ( preg_match( '/^\d+\.\d+$/', $tested ) && 0 === strpos( $wp, $tested . '.' ) ) {
+		return $wp;
+	}
+	return $tested;
+}
+
 function update_package_url(): string {
 	return 'https://github.com/' . UPDATE_REPO . '/archive/refs/heads/' . UPDATE_BRANCH . '.zip';
 }
@@ -90,7 +102,7 @@ add_filter( 'pre_set_site_transient_update_plugins', static function ( $transien
 		'package'      => update_package_url(),
 		'requires'     => $info['requires'] ?? '',
 		'requires_php' => $info['requires_php'] ?? '',
-		'tested'       => $info['tested'] ?? '',
+		'tested'       => tested_up_to( $info['tested'] ?? '' ),
 		'icons'        => [],
 		'banners'      => [],
 	];
@@ -125,7 +137,7 @@ add_filter( 'plugins_api', static function ( $result, $action, $args ) {
 		'homepage'      => 'https://github.com/' . UPDATE_REPO,
 		'requires'      => $info['requires'] ?? '',
 		'requires_php'  => $info['requires_php'] ?? '',
-		'tested'        => $info['tested'] ?? '',
+		'tested'        => tested_up_to( $info['tested'] ?? '' ),
 		'download_link' => update_package_url(),
 		'sections'      => [
 			'description' => esc_html__( 'Client case studies, kept separate from blog posts.', 'pratcom-etudes-de-cas' ),
