@@ -83,6 +83,16 @@ function update_package_url(): string {
 	return 'https://github.com/' . UPDATE_REPO . '/archive/refs/heads/' . UPDATE_BRANCH . '.zip';
 }
 
+/**
+ * Version installed on disk. Read from the file, not from PEDC_VERSION: during
+ * the update request the old code is still loaded while the new files are
+ * already in place, and the constant would announce an update that is done.
+ */
+function installed_version(): string {
+	$data = get_file_data( PEDC_FILE, [ 'Version' => 'Version' ] );
+	return $data['Version'] ? $data['Version'] : PEDC_VERSION;
+}
+
 /** Tell WordPress about the update (or explicitly that there is none). */
 add_filter( 'pre_set_site_transient_update_plugins', static function ( $transient ) {
 	if ( ! is_object( $transient ) ) {
@@ -106,12 +116,22 @@ add_filter( 'pre_set_site_transient_update_plugins', static function ( $transien
 		'icons'        => [],
 		'banners'      => [],
 	];
-	if ( version_compare( $info['version'], PEDC_VERSION, '>' ) ) {
+	if ( version_compare( $info['version'], installed_version(), '>' ) ) {
 		$transient->response[ $basename ] = $item;
 		unset( $transient->no_update[ $basename ] );
 	} else {
 		$item->package                     = '';
 		$transient->no_update[ $basename ] = $item; // Enables the auto-update toggle.
+		unset( $transient->response[ $basename ] );
+	}
+	return $transient;
+} );
+
+/** Never show an update that is already installed (stale cached data). */
+add_filter( 'site_transient_update_plugins', static function ( $transient ) {
+	$basename = plugin_basename( PEDC_FILE );
+	if ( is_object( $transient ) && isset( $transient->response[ $basename ]->new_version )
+		&& version_compare( $transient->response[ $basename ]->new_version, installed_version(), '<=' ) ) {
 		unset( $transient->response[ $basename ] );
 	}
 	return $transient;

@@ -3,7 +3,7 @@ Contributors: pratcom
 Requires at least: 6.7
 Tested up to: 7.1
 Requires PHP: 8.0
-Stable tag: 1.1.1
+Stable tag: 1.1.2
 License: GPLv2 or later
 
 Type de contenu « Études de cas », séparé des articles du blogue.
@@ -37,6 +37,9 @@ Le plugin se met à jour comme une extension de WordPress.org, à partir de la b
 La suppression de l'extension retire seulement ses réglages. Les études de cas, secteurs et services restent en base.
 
 == Changelog ==
+
+= 1.1.2 =
+* Après une mise à jour, l'avis « Nouvelle version disponible » ne reste plus affiché pour la version qu'on vient d'installer (la version installée est lue dans le fichier, pas dans le code encore chargé).
 
 = 1.1.1 =
 * « Compatible jusqu'à » tient compte des versions correctives (7.1 couvre 7.1.2) : plus d'avertissement « pas testée » dans la fenêtre de détails.
