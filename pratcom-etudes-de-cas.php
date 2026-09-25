@@ -2,8 +2,8 @@
 /**
  * Plugin Name:       Pratcom – Études de cas
  * Plugin URI:        https://pratcom.net/
- * Description:       Adds a "Case Studies" content type, separate from blog posts: sectors, services, project sheet (client, results, testimonial), templates for block and classic themes, WPML ready. With the WordPress 7 AI Client: AI correction and WPML translation of case studies.
- * Version:           1.2.0
+ * Description:       Adds a "Case Studies" content type, separate from blog posts: sectors, services, project sheet (client, results, testimonial), templates for block and classic themes, WPML ready. With the WordPress 7 AI Client: a case study assistant (project sheet, notes organized into sections, image, internal links, Yoast SEO, WPML translation, publication).
+ * Version:           1.3.0
  * Requires at least: 6.7
  * Requires PHP:      8.0
  * Author:            Pratcom Média
@@ -16,7 +16,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'PEDC_VERSION', '1.2.0' );
+define( 'PEDC_VERSION', '1.3.0' );
 define( 'PEDC_FILE', __FILE__ );
 define( 'PEDC_DIR', plugin_dir_path( __FILE__ ) );
 define( 'PEDC_URL', plugin_dir_url( __FILE__ ) );
