@@ -1,6 +1,6 @@
 <?php
 /**
- * AI tools (correction and translation): shared helpers.
+ * AI tools (assistant, correction, translation): shared helpers.
  *
  * Everything goes through the WordPress 7 AI Client (wp_ai_client_prompt()),
  * which holds the provider keys (Settings > Connectors). The plugin stores no
@@ -295,6 +295,8 @@ function yoast_keys(): array {
 	];
 }
 
+require_once __DIR__ . '/ai-access.php';
 require_once __DIR__ . '/ai-revise.php';
 require_once __DIR__ . '/ai-translate.php';
+require_once __DIR__ . '/ai-assistant.php';
 require_once __DIR__ . '/ai-admin.php';
