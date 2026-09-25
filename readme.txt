@@ -3,7 +3,7 @@ Contributors: pratcom
 Requires at least: 6.7
 Tested up to: 7.1
 Requires PHP: 8.0
-Stable tag: 1.1.2
+Stable tag: 1.2.0
 License: GPLv2 or later
 
 Type de contenu « Études de cas », séparé des articles du blogue.
@@ -27,6 +27,12 @@ Type de contenu « Études de cas », séparé des articles du blogue.
 * Données structurées : enrichit l'Article de Yoast / Rank Math (client en « about », secteurs, services), ou produit son propre JSON-LD.
 * WPML : wpml-config.xml fourni (type, taxonomies, champs). Traduire l'identifiant d'URL dans WPML > Réglages > Traduction des types de publication.
 * Traductions : fr_CA, fr_FR (chaînes sources en anglais).
+* Outils IA (WordPress 7 et son client IA, avec « AI Provider for Anthropic » et sa clé sous Réglages > Connecteurs ; l'extension ne stocke aucune clé) :
+  - le menu Études de cas ouvre une page qui liste toutes les études originales (recherche, pastilles de langue WPML), avec « Nouvelle étude » et un bouton vers l'écran WordPress standard ;
+  - Corriger : fautes et mise en forme du texte, des résultats clés et du témoignage, sans réécrire ; sections H2 et ancres gardées, liens, images et tableaux gardés à leur place ; titre, adresse, client, site, logo et période jamais touchés ; aperçu avant/après, rien n'est enregistré avant « Appliquer » ; les traductions existantes sont ensuite refaites ;
+  - Traduire (WPML) : titre, texte, extrait, adresse, champs Yoast, période, résultats, témoignage ; client, site, logo et image à la une copiés ; secteurs et services sans équivalent créés dans la langue et liés ; nouvelle traduction en brouillon, traduction existante mise à jour avec son statut ;
+  - en français, espace insécable devant « : ; ? ! » et dans les guillemets, aucun tiret cadratin ;
+  - accessible à toute personne qui peut modifier les articles. Sans le client IA, rien ne change dans le menu.
 
 == Mises à jour ==
 
@@ -37,6 +43,9 @@ Le plugin se met à jour comme une extension de WordPress.org, à partir de la b
 La suppression de l'extension retire seulement ses réglages. Les études de cas, secteurs et services restent en base.
 
 == Changelog ==
+
+= 1.2.0 =
+* Outils IA de correction et de traduction (voir la description) : nouvelle page du menu Études de cas, lien « Corriger / traduire » dans la liste WordPress. Fichiers includes/ai*.php, assets/js/ai.js, assets/css/ai.css.
 
 = 1.1.2 =
 * Après une mise à jour, l'avis « Nouvelle version disponible » ne reste plus affiché pour la version qu'on vient d'installer (la version installée est lue dans le fichier, pas dans le code encore chargé).
