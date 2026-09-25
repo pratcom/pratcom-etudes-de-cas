@@ -1,0 +1,40 @@
+/* Pratcom Études de cas: AI tools page. */
+.pedc-ai-wrap { max-width: 1280px; }
+.pedc-ai-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 16px 0; }
+.pedc-ai-count { color: #646970; }
+.pedc-ai-empty { padding: 32px; text-align: center; background: #fff; border: 1px dashed #c3c4c7; }
+.pedc-ai-list { margin: 0; background: #fff; border: 1px solid #c3c4c7; }
+.pedc-ai-row { display: flex; gap: 14px; align-items: center; margin: 0; padding: 12px 14px; border-bottom: 1px solid #f0f0f1; }
+.pedc-ai-row:last-child { border-bottom: 0; }
+.pedc-ai-thumb { flex: 0 0 56px; width: 56px; height: 56px; object-fit: cover; border-radius: 4px; background: #f0f0f1; }
+.pedc-ai-row__main { flex: 1 1 auto; min-width: 0; }
+.pedc-ai-row__title { font-size: 14px; font-weight: 600; text-decoration: none; }
+.pedc-ai-row__meta { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; margin-top: 4px; color: #646970; font-size: 12px; }
+.pedc-ai-row__actions { display: flex; gap: 8px; flex: 0 0 auto; }
+.pedc-ai-langs { display: inline-flex; gap: 4px; }
+.pedc-ai-badge { display: inline-block; padding: 1px 6px; border-radius: 3px; background: #2271b1; color: #fff; font-size: 11px; font-weight: 600; line-height: 16px; }
+.pedc-ai-badge.is-muted { background: #dcdcde; color: #1d2327; }
+.pedc-ai-pager { display: flex; gap: 12px; align-items: center; justify-content: center; margin: 16px 0; }
+.pedc-ai-wp-link { margin-top: 24px; }
+.pedc-ai-study__head { margin: 8px 0 16px; }
+.pedc-ai-study__head h2 { margin: 0 0 4px; font-size: 20px; }
+.pedc-ai-card { margin: 0 0 20px; padding: 16px 20px; background: #fff; border: 1px solid #c3c4c7; }
+.pedc-ai-card h2 { margin-top: 0; }
+.pedc-ai-card .components-notice { margin: 8px 0; }
+.pedc-ai-busy { display: flex; align-items: center; gap: 6px; }
+.pedc-ai-stats { display: flex; flex-wrap: wrap; gap: 4px 20px; margin: 8px 0 16px; color: #50575e; }
+.pedc-ai-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+.pedc-ai-compare h4 { margin: 0 0 6px; color: #646970; text-transform: uppercase; font-size: 11px; }
+.pedc-ai-compare blockquote { margin: 0; padding: 8px 12px; border-left: 3px solid #dcdcde; background: #f6f7f7; }
+.pedc-ai-preview { max-height: 560px; overflow: auto; padding: 8px 14px; border: 1px solid #dcdcde; background: #fcfcfc; }
+.pedc-ai-preview img { max-width: 100%; height: auto; max-height: 260px; }
+.pedc-ai-value { width: 30%; font-weight: 600; }
+.pedc-ai-actions { display: flex; gap: 8px; margin-top: 16px; }
+.pedc-ai-langtable { max-width: 720px; margin: 12px 0; }
+.pedc-ai-langtable td { vertical-align: middle; }
+.pedc-ai-right { text-align: right; }
+@media (max-width: 782px) {
+	.pedc-ai-compare { grid-template-columns: 1fr; }
+	.pedc-ai-row { flex-wrap: wrap; }
+	.pedc-ai-row__actions { width: 100%; }
+}
