@@ -40,7 +40,8 @@
 		return apiFetch( { path: ns + path, method: 'POST', data: data || {} } );
 	}
 	function errText( e ) {
-		return ( e && e.message ) || t( 'failed' );
+		if ( e && e.message ) { return e.message; }
+		return t( 'failed' ) + ( e && e.status ? ' (HTTP ' + e.status + ')' : ( e && e.code ? ' (' + e.code + ')' : '' ) );
 	}
 	function statusLabel( s ) {
 		var k = 'status_' + s;
@@ -52,6 +53,22 @@
 	}
 	function setUrl( id ) {
 		try { window.history.replaceState( {}, '', addQueryArgs( cfg.pageUrl, id ? { post: id } : {} ) ); } catch ( e ) {}
+	}
+
+	// One language in two short requests: the text first, then the title,
+	// sheet, sectors, services and Yoast fields.
+	function translateLang( postId, code, onStep ) {
+		var out = {};
+		return post( '/translate', { post_id: postId, target: code, part: 'text' } ).then( function ( r ) {
+			out = r;
+			if ( onStep ) { onStep( 'meta' ); }
+			return post( '/translate', { post_id: postId, target: code, part: 'meta' } );
+		} ).then( function ( m ) {
+			return Object.assign( {}, out, m, { updated: out.updated } );
+		} );
+	}
+	function metaWarning( r ) {
+		return r.meta_failed ? ' ' + t( 'metaFailed' ) + ( r.meta_error ? ' (' + r.meta_error + ')' : '' ) : '';
 	}
 
 	// Crop to 16:9, max 1600 px wide, light JPEG, in the browser (the server stores WebP).
@@ -556,8 +573,8 @@
 				langs.forEach( function ( code ) {
 					chain = chain.then( function () {
 						p.info( t( 'retranslating' ) + ' (' + langName( code ) + ')…', 'info' );
-						return post( '/translate', { post_id: p.postId, target: code } ).then( function () {
-							msgs.push( t( 'retranslated' ) + ' ' + langName( code ) + '.' );
+						return translateLang( p.postId, code ).then( function ( tr ) {
+							msgs.push( t( 'retranslated' ) + ' ' + langName( code ) + '.' + metaWarning( tr ) );
 						} ).catch( function ( err ) { msgs.push( langName( code ) + ' : ' + errText( err ) ); } );
 					} );
 				} );
@@ -944,10 +961,12 @@
 			codes.forEach( function ( code ) {
 				chain = chain.then( function () {
 					p.info( t( 'translating' ) + ' (' + langName( code ) + ')', 'info' );
-					return post( '/translate', { post_id: p.postId, target: code } ).then( function ( r ) {
+					return translateLang( p.postId, code, function () {
+						p.info( t( 'translatingMeta' ) + ' (' + langName( code ) + ')', 'info' );
+					} ).then( function ( r ) {
 						var line = langName( code ) + ' : ' + ( r.updated ? t( 'updatedTr' ) : t( 'translated' ) );
 						if ( r.created_terms && r.created_terms.length ) { line += ' ' + t( 'createdTerms' ) + ' ' + r.created_terms.join( ', ' ) + '.'; }
-						if ( r.meta_failed ) { warn = true; line += ' ' + t( 'metaFailed' ); }
+						if ( r.meta_failed ) { warn = true; line += metaWarning( r ); }
 						notes.push( line );
 					} ).catch( function ( err ) { warn = true; notes.push( langName( code ) + ' : ' + errText( err ) ); } );
 				} );
