@@ -3,7 +3,7 @@ Contributors: pratcom
 Requires at least: 6.7
 Tested up to: 7.1
 Requires PHP: 8.0
-Stable tag: 1.3.1
+Stable tag: 1.3.2
 License: GPLv2 or later
 
 Type de contenu « Études de cas », séparé des articles du blogue.
@@ -49,6 +49,9 @@ Le plugin se met à jour comme une extension de WordPress.org, à partir de la b
 La suppression de l'extension retire seulement ses réglages. Les études de cas, secteurs et services restent en base.
 
 == Changelog ==
+
+= 1.3.2 =
+* Traduction : un secteur ou un service que WPML avait copié dans la langue avec le nom d'origine (ex. « Transport routier » en anglais) reçoit maintenant le nom traduit et son slug. Un terme déjà renommé à la main n'est pas touché.
 
 = 1.3.1 =
 * Traduction : le titre, l'extrait, le slug, la fiche projet, les secteurs, les services et les champs Yoast ne se traduisaient pas sur un vrai site (réponse de l'IA refusée). Format de réponse simplifié : tous les champs sont demandés, vides au besoin.

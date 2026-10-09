@@ -5,9 +5,10 @@
  * Translated: title, text (block markup kept, section anchors unchanged),
  * excerpt, slug, Yoast fields, period, key results, testimonial and its
  * author. Copied: client, website, logo, featured image. Sectors and
- * services: the existing translation is used; a missing one is created in
- * the target language and linked in WPML. A new translation is saved as a
- * draft; an existing one is updated and keeps its status.
+ * services: the existing translation is used (renamed when it still has the
+ * source name); a missing one is created in the target language and linked
+ * in WPML. A new translation is saved as a draft; an existing one is
+ * updated and keeps its status.
  */
 
 namespace Pratcom\EtudesDeCas\AI;
@@ -63,13 +64,13 @@ function term_names( array $terms ): array {
  * Translation of a term in a language: the existing one, or a new term
  * created in that language and linked to the source in WPML.
  *
- * @return array { id, created }
+ * @return array { id, created, renamed }
  */
 function translated_term( \WP_Term $term, string $name, string $source, string $target ): array {
 	$taxonomy = $term->taxonomy;
 	$existing = (int) apply_filters( 'wpml_object_id', (int) $term->term_id, $taxonomy, false, $target );
 	if ( $existing && $existing !== (int) $term->term_id ) {
-		return [ 'id' => $existing, 'created' => false ];
+		return [ 'id' => $existing, 'created' => false, 'renamed' => rename_copied_term( $existing, $term, $name, $target ) ];
 	}
 	$parent = 0;
 	if ( $term->parent ) {
@@ -100,7 +101,36 @@ function translated_term( \WP_Term $term, string $name, string $source, string $
 		}
 		return (int) $result['term_id'];
 	} );
-	return [ 'id' => $id, 'created' => $id > 0 ];
+	return [ 'id' => $id, 'created' => $id > 0, 'renamed' => false ];
+}
+
+/**
+ * A translated term that still carries the source name (WPML copies the
+ * term when the translation is created) gets the translated name and slug.
+ * A term someone already renamed is left alone.
+ */
+function rename_copied_term( int $id, \WP_Term $source_term, string $name, string $target ): bool {
+	$taxonomy = $source_term->taxonomy;
+	$copy     = get_term( $id, $taxonomy );
+	if ( ! $copy instanceof \WP_Term ) {
+		return false;
+	}
+	$plain = static function ( string $s ): string {
+		return mb_strtolower( trim( html_entity_decode( $s, ENT_QUOTES, 'UTF-8' ) ) );
+	};
+	$name = trim( $name );
+	if ( '' === $name || $plain( $copy->name ) !== $plain( $source_term->name ) || $plain( $name ) === $plain( $copy->name ) ) {
+		return false;
+	}
+	return (bool) with_language( $target, static function () use ( $id, $taxonomy, $name, $target ) {
+		$slug = sanitize_title( $name );
+		foreach ( [ $slug, $slug . '-' . $target ] as $try ) {
+			if ( ! is_wp_error( wp_update_term( $id, $taxonomy, [ 'name' => $name, 'slug' => $try ] ) ) ) {
+				return true;
+			}
+		}
+		return ! is_wp_error( wp_update_term( $id, $taxonomy, [ 'name' => $name ] ) );
+	} );
 }
 
 /** Tell WPML a translation is up to date (not "needs update"). */
@@ -382,6 +412,7 @@ function translate_meta_part( array $ctx ): array {
 
 	// Sectors and services.
 	$created = [];
+	$renamed = [];
 	foreach ( [ 'sectors' => PEDC_TAX_SECTOR, 'services' => PEDC_TAX_SERVICE ] as $field => $taxonomy ) {
 		$names = is_array( $m[ $field ] ?? null ) ? array_values( $m[ $field ] ) : [];
 		$ids   = [];
@@ -394,6 +425,8 @@ function translate_meta_part( array $ctx ): array {
 				}
 				if ( $res['created'] ) {
 					$created[] = $label;
+				} elseif ( $res['renamed'] ) {
+					$renamed[] = $label;
 				}
 			}
 		}
@@ -411,6 +444,7 @@ function translate_meta_part( array $ctx ): array {
 	return [
 		'translation'   => translation_response( $ctx, $new_id, true )['translation'],
 		'created_terms' => $created,
+		'renamed_terms' => $renamed,
 		'meta_failed'   => false,
 		'meta_model'    => $meta['model'],
 	];
