@@ -46,7 +46,9 @@ function translate_meta_schema(): array {
 			'twitter_title'       => $str,
 			'twitter_description' => $str,
 		],
-		'required'             => [ 'title' ],
+		// Every field required: strict schemas with many optional fields are
+		// refused by the API. Empty source fields come back empty.
+		'required'             => [ 'title', 'excerpt', 'slug', 'period', 'testimonial', 'testimonial_author', 'results', 'sectors', 'services', 'seo_title', 'meta_description', 'focus_keyphrase', 'og_title', 'og_description', 'twitter_title', 'twitter_description' ],
 	];
 }
 
@@ -114,9 +116,12 @@ function mark_synced( int $post_id ): void {
 	// phpcs:enable
 }
 
-/** POST /translate: translate a study into one language. */
-function handle_translate( \WP_REST_Request $request ) {
-	long_request();
+/**
+ * Context shared by both parts of a translation.
+ *
+ * @return array|\WP_Error
+ */
+function translate_context( \WP_REST_Request $request ) {
 	if ( ! wpml_active() ) {
 		return new \WP_Error( 'pedc_ai_no_wpml', is_fr() ? 'WPML n\'est pas actif sur ce site.' : 'WPML is not active on this site.', [ 'status' => 400 ] );
 	}
@@ -124,8 +129,7 @@ function handle_translate( \WP_REST_Request $request ) {
 	if ( is_wp_error( $post ) ) {
 		return $post;
 	}
-	$original = original_of( $post->ID );
-	if ( $original !== $post->ID ) {
+	if ( original_of( $post->ID ) !== $post->ID ) {
 		return new \WP_Error( 'pedc_ai_not_original', is_fr() ? 'Cette étude est une traduction : traduis à partir de l\'original.' : 'This case study is a translation: translate from the original.', [ 'status' => 400 ] );
 	}
 	$source = post_language( $post->ID );
@@ -133,28 +137,89 @@ function handle_translate( \WP_REST_Request $request ) {
 	if ( '' === $target || $target === $source || ! in_array( $target, wp_list_pluck( languages(), 'code' ), true ) ) {
 		return new \WP_Error( 'pedc_ai_no_target', is_fr() ? 'Langue cible invalide.' : 'Invalid target language.', [ 'status' => 400 ] );
 	}
-	$name  = language_name( $target );
-	$sheet = \Pratcom\EtudesDeCas\sheet( $post );
+	return [
+		'post'     => $post,
+		'source'   => $source,
+		'target'   => $target,
+		'name'     => language_name( $target ),
+		'sheet'    => \Pratcom\EtudesDeCas\sheet( $post ),
+		'existing' => (int) ( translations_of( $post->ID )[ $target ] ?? 0 ),
+	];
+}
 
-	// Sectors with their parents, parents first, so a translated child
-	// sector keeps its place in the tree.
-	$sectors = [];
-	foreach ( $sheet['sectors'] as $term ) {
-		foreach ( array_reverse( get_ancestors( $term->term_id, PEDC_TAX_SECTOR, 'taxonomy' ) ) as $ancestor_id ) {
-			$ancestor = get_term( $ancestor_id, PEDC_TAX_SECTOR );
-			if ( $ancestor instanceof \WP_Term ) {
-				$sectors[ $ancestor->term_id ] = $ancestor;
-			}
-		}
-		$sectors[ $term->term_id ] = $term;
+/**
+ * POST /translate: translate a study into one language.
+ *
+ * "part": "text" translates the content and creates or updates the
+ * translation; "meta" then translates the title, excerpt, slug, project
+ * sheet, sectors, services and Yoast fields of that translation. Two short
+ * requests instead of one long one. Without "part", both run in a row.
+ */
+function handle_translate( \WP_REST_Request $request ) {
+	long_request();
+	$ctx = translate_context( $request );
+	if ( is_wp_error( $ctx ) ) {
+		return $ctx;
 	}
-	$sectors  = array_values( $sectors );
-	$assigned = [ PEDC_TAX_SECTOR => wp_list_pluck( $sheet['sectors'], 'term_id' ), PEDC_TAX_SERVICE => wp_list_pluck( $sheet['services'], 'term_id' ) ];
+	$part = sanitize_key( (string) $request->get_param( 'part' ) );
+	$out  = [];
+	if ( 'meta' !== $part ) {
+		$text = translate_text_part( $ctx );
+		if ( is_wp_error( $text ) ) {
+			return $text;
+		}
+		$out             = $text;
+		$ctx['existing'] = (int) $text['translation']['id'];
+	}
+	if ( 'text' !== $part ) {
+		if ( ! $ctx['existing'] ) {
+			return new \WP_Error( 'pedc_ai_no_translation', is_fr() ? 'Traduis d\'abord le texte.' : 'Translate the text first.', [ 'status' => 400 ] );
+		}
+		$meta = translate_meta_part( $ctx );
+		$out  = array_merge( $out, $meta );
+	}
+	return rest_ensure_response( $out );
+}
 
-	// 1) The text: block markup translated as is.
+/** Response for one translation. */
+function translation_response( array $ctx, int $id, bool $updated ): array {
+	$lang_name = $ctx['target'];
+	foreach ( languages() as $l ) {
+		if ( $l['code'] === $ctx['target'] ) {
+			$lang_name = $l['name'];
+		}
+	}
+	return [
+		'post_id'     => $ctx['post']->ID,
+		'lang'        => $ctx['target'],
+		'lang_name'   => $lang_name,
+		'translation' => [
+			'id'     => $id,
+			'title'  => get_the_title( $id ),
+			'status' => get_post_status( $id ),
+			'edit'   => get_edit_post_link( $id, 'raw' ),
+			'view'   => get_permalink( $id ),
+		],
+		'updated'     => $updated,
+	];
+}
+
+/**
+ * Part 1: the block markup translated as is, saved in the translation
+ * (created as a draft and linked in WPML when it does not exist yet).
+ * Client, website, logo and featured image are copied.
+ *
+ * @return array|\WP_Error
+ */
+function translate_text_part( array $ctx ) {
+	$post   = $ctx['post'];
+	$source = $ctx['source'];
+	$target = $ctx['target'];
+	$sheet  = $ctx['sheet'];
+
 	$text = ask(
 		'translate',
-		'You are a professional translator. Translate the content of this company case study into ' . $name . '. Keep every HTML tag, attribute and WordPress block comment (the <!-- wp:... --> and <!-- /wp:... --> markers, with their JSON) exactly unchanged, including "anchor" and id values such as section-1; translate only the human-readable text. Keep brand, product and company names as they are. Never use em-dashes. Output ONLY the translated content, with no preamble, no explanation and no code fences.',
+		'You are a professional translator. Translate the content of this company case study into ' . $ctx['name'] . '. Keep every HTML tag, attribute and WordPress block comment (the <!-- wp:... --> and <!-- /wp:... --> markers, with their JSON) exactly unchanged, including "anchor" and id values such as section-1; translate only the human-readable text. Keep brand, product and company names as they are. Never use em-dashes. Output ONLY the translated content, with no preamble, no explanation and no code fences.',
 		(string) $post->post_content,
 		null,
 		(int) apply_filters( 'pedc_ai_translate_max_tokens', 16000 )
@@ -167,61 +232,19 @@ function handle_translate( \WP_REST_Request $request ) {
 		$content = nbsp_markup( $content );
 	}
 
-	// 2) The short fields, in one JSON object.
-	$fields = [
-		'title'              => $post->post_title,
-		'excerpt'            => (string) $post->post_excerpt,
-		'slug'               => urldecode( (string) $post->post_name ),
-		'period'             => $sheet['period'],
-		'testimonial'        => $sheet['testimonial'],
-		'testimonial_author' => $sheet['testimonial_author'],
-		'results'            => $sheet['results'],
-		'sectors'            => term_names( $sectors ),
-		'services'           => term_names( $sheet['services'] ),
-	];
-	foreach ( yoast_keys() as $key => $field ) {
-		$value = (string) get_post_meta( $post->ID, $key, true );
-		if ( '' !== $value ) {
-			$fields[ $field ] = $value;
-		}
-	}
-	$meta = ask(
-		'translate',
-		'Translate every provided field of this company case study into ' . $name . '. Keep brand, product, company and person names as they are. "slug" is a short, lowercase, hyphen-separated URL slug. "results" keeps the same rows in the same order; translate "value" only when it contains words (keep figures, signs and units). "testimonial_author" is a name and a job title: keep the name, translate the title. "sectors" and "services" are lists: same order, same count. Empty fields stay empty. Never use em-dashes. Return strictly using the JSON schema.',
-		"Fields JSON:\n" . wp_json_encode( $fields, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES ),
-		translate_meta_schema(),
-		8000
-	);
-	$m = is_wp_error( $meta ) ? [] : $meta['data'];
-	// Translated value of a field; an empty source field stays empty.
-	$pick = static function ( string $key, string $fallback ) use ( $m, $target ): string {
-		if ( '' === trim( $fallback ) ) {
-			return '';
-		}
-		$v = isset( $m[ $key ] ) && is_string( $m[ $key ] ) && '' !== trim( $m[ $key ] ) ? $m[ $key ] : $fallback;
-		return clean_text( $v, $target );
-	};
-
-	$existing = translations_of( $post->ID )[ $target ] ?? 0;
-	$postarr  = [
-		'post_title'   => sanitize_text_field( $pick( 'title', $post->post_title ) ),
-		'post_content' => $content,
-		'post_excerpt' => sanitize_textarea_field( $pick( 'excerpt', $fields['excerpt'] ) ),
-	];
-	$slug = isset( $m['slug'] ) ? sanitize_title( (string) $m['slug'] ) : '';
-	if ( '' !== $slug ) {
-		$postarr['post_name'] = $slug;
-	}
-
-	$new_id = with_language( $target, static function () use ( $existing, $postarr, $post, $source, $target ) {
+	$existing = $ctx['existing'];
+	$new_id   = with_language( $target, static function () use ( $existing, $content, $post, $source, $target ) {
 		if ( $existing ) {
-			$postarr['ID'] = $existing;
-			return wp_update_post( wp_slash( $postarr ), true );
+			return wp_update_post( wp_slash( [ 'ID' => $existing, 'post_content' => $content ] ), true );
 		}
-		$postarr['post_type']   = PEDC_POST_TYPE;
-		$postarr['post_status'] = 'draft';
-		$postarr['post_author'] = (int) $post->post_author;
-		$id                     = wp_insert_post( wp_slash( $postarr ), true );
+		// The title is translated by part 2; until then it keeps the original.
+		$id = wp_insert_post( wp_slash( [
+			'post_type'    => PEDC_POST_TYPE,
+			'post_status'  => 'draft',
+			'post_author'  => (int) $post->post_author,
+			'post_title'   => $post->post_title,
+			'post_content' => $content,
+		] ), true );
 		if ( is_wp_error( $id ) || ! $id ) {
 			return $id;
 		}
@@ -239,12 +262,97 @@ function handle_translate( \WP_REST_Request $request ) {
 	}
 	$new_id = (int) $new_id;
 
-	// Project sheet: copied fields, then translated ones.
 	foreach ( [ '_pedc_client' => 'client', '_pedc_client_url' => 'client_url', '_pedc_client_logo' => 'client_logo' ] as $key => $field ) {
 		if ( ! empty( $sheet[ $field ] ) ) {
 			update_post_meta( $new_id, $key, wp_slash( $sheet[ $field ] ) );
 		}
 	}
+	$thumb = (int) get_post_thumbnail_id( $post->ID );
+	if ( $thumb ) {
+		set_post_thumbnail( $new_id, $thumb );
+	}
+	update_post_meta( $new_id, '_pedc_ai_translated', gmdate( 'Y-m-d H:i:s' ) );
+	mark_synced( $new_id );
+
+	$out          = translation_response( $ctx, $new_id, (bool) $existing );
+	$out['model'] = $text['model'];
+	return $out;
+}
+
+/**
+ * Part 2: title, excerpt, slug, project sheet, sectors, services and Yoast
+ * fields of an existing translation. A failure is reported with its reason
+ * and leaves the translation as it is.
+ */
+function translate_meta_part( array $ctx ): array {
+	$post   = $ctx['post'];
+	$source = $ctx['source'];
+	$target = $ctx['target'];
+	$sheet  = $ctx['sheet'];
+	$new_id = $ctx['existing'];
+
+	// Sectors with their parents, parents first, so a translated child
+	// sector keeps its place in the tree.
+	$sectors = [];
+	foreach ( $sheet['sectors'] as $term ) {
+		foreach ( array_reverse( get_ancestors( $term->term_id, PEDC_TAX_SECTOR, 'taxonomy' ) ) as $ancestor_id ) {
+			$ancestor = get_term( $ancestor_id, PEDC_TAX_SECTOR );
+			if ( $ancestor instanceof \WP_Term ) {
+				$sectors[ $ancestor->term_id ] = $ancestor;
+			}
+		}
+		$sectors[ $term->term_id ] = $term;
+	}
+	$sectors  = array_values( $sectors );
+	$assigned = [ PEDC_TAX_SECTOR => wp_list_pluck( $sheet['sectors'], 'term_id' ), PEDC_TAX_SERVICE => wp_list_pluck( $sheet['services'], 'term_id' ) ];
+
+	$fields = [
+		'title'              => $post->post_title,
+		'excerpt'            => (string) $post->post_excerpt,
+		'slug'               => urldecode( (string) $post->post_name ),
+		'period'             => $sheet['period'],
+		'testimonial'        => $sheet['testimonial'],
+		'testimonial_author' => $sheet['testimonial_author'],
+		'results'            => $sheet['results'],
+		'sectors'            => term_names( $sectors ),
+		'services'           => term_names( $sheet['services'] ),
+	];
+	foreach ( yoast_keys() as $key => $field ) {
+		$fields[ $field ] = (string) get_post_meta( $post->ID, $key, true );
+	}
+	$meta = ask(
+		'translate',
+		'Translate every field of this company case study into ' . $ctx['name'] . '. Keep brand, product, company and person names as they are. "slug" is a short, lowercase, hyphen-separated URL slug. "results" keeps the same rows in the same order; translate "value" only when it contains words (keep figures, signs and units). "testimonial_author" is a name and a job title: keep the name, translate the title. "sectors" and "services" are lists: same order, same count. A field that is empty stays an empty string (or an empty list). Never use em-dashes. Return strictly using the JSON schema.',
+		"Fields JSON:\n" . wp_json_encode( $fields, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES ),
+		translate_meta_schema(),
+		8000
+	);
+	if ( is_wp_error( $meta ) ) {
+		return [ 'meta_failed' => true, 'meta_error' => $meta->get_error_message() ];
+	}
+	$m = $meta['data'];
+	// Translated value of a field; an empty source field stays empty.
+	$pick = static function ( string $key, string $fallback ) use ( $m, $target ): string {
+		if ( '' === trim( $fallback ) ) {
+			return '';
+		}
+		$v = isset( $m[ $key ] ) && is_string( $m[ $key ] ) && '' !== trim( $m[ $key ] ) ? $m[ $key ] : $fallback;
+		return clean_text( $v, $target );
+	};
+
+	$postarr = [
+		'ID'           => $new_id,
+		'post_title'   => sanitize_text_field( $pick( 'title', $post->post_title ) ),
+		'post_excerpt' => sanitize_textarea_field( $pick( 'excerpt', $fields['excerpt'] ) ),
+	];
+	$slug = isset( $m['slug'] ) ? sanitize_title( (string) $m['slug'] ) : '';
+	if ( '' !== $slug ) {
+		$postarr['post_name'] = $slug;
+	}
+	with_language( $target, static function () use ( $postarr ) {
+		wp_update_post( wp_slash( $postarr ) );
+	} );
+
 	foreach ( [ '_pedc_period' => 'period', '_pedc_testimonial' => 'testimonial', '_pedc_testimonial_author' => 'testimonial_author' ] as $key => $field ) {
 		if ( '' === $sheet[ $field ] ) {
 			continue;
@@ -292,40 +400,18 @@ function handle_translate( \WP_REST_Request $request ) {
 		wp_set_object_terms( $new_id, $ids, $taxonomy, false );
 	}
 
-	// Featured image (shared) and Yoast fields.
-	$thumb = (int) get_post_thumbnail_id( $post->ID );
-	if ( $thumb ) {
-		set_post_thumbnail( $new_id, $thumb );
-	}
 	foreach ( yoast_keys() as $key => $field ) {
-		if ( isset( $fields[ $field ] ) ) {
+		if ( '' !== $fields[ $field ] ) {
 			$value = 'focus_keyphrase' === $field ? no_dashes( (string) ( $m[ $field ] ?? $fields[ $field ] ) ) : $pick( $field, $fields[ $field ] );
 			update_post_meta( $new_id, $key, wp_slash( sanitize_text_field( $value ) ) );
 		}
 	}
-	update_post_meta( $new_id, '_pedc_ai_translated', gmdate( 'Y-m-d H:i:s' ) );
 	mark_synced( $new_id );
 
-	$lang_name = $target;
-	foreach ( languages() as $l ) {
-		if ( $l['code'] === $target ) {
-			$lang_name = $l['name'];
-		}
-	}
-	return rest_ensure_response( [
-		'post_id'       => $post->ID,
-		'lang'          => $target,
-		'lang_name'     => $lang_name,
-		'translation'   => [
-			'id'     => $new_id,
-			'title'  => get_the_title( $new_id ),
-			'status' => get_post_status( $new_id ),
-			'edit'   => get_edit_post_link( $new_id, 'raw' ),
-			'view'   => get_permalink( $new_id ),
-		],
-		'updated'       => (bool) $existing,
+	return [
+		'translation'   => translation_response( $ctx, $new_id, true )['translation'],
 		'created_terms' => $created,
-		'meta_failed'   => is_wp_error( $meta ),
-		'model'         => $text['model'],
-	] );
+		'meta_failed'   => false,
+		'meta_model'    => $meta['model'],
+	];
 }
