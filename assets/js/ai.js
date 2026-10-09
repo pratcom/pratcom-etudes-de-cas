@@ -47,6 +47,10 @@
 		var k = 'status_' + s;
 		return t( k ) !== k ? t( k ) : s;
 	}
+	// Published: "View"; draft, pending or scheduled: "Preview" (WordPress preview link).
+	function viewLabel( status ) {
+		return 'publish' === status ? t( 'view' ) : t( 'preview' );
+	}
 	function langName( code ) {
 		var found = ( cfg.languages || [] ).filter( function ( l ) { return l.code === code; } )[ 0 ];
 		return found ? found.name : code;
@@ -280,7 +284,7 @@
 				cfg.wpml ? el( LangBadge, { code: session.lang } ) : null,
 				el( Status, { status: session.status } ),
 				el( 'a', { href: session.edit_link, target: '_blank', rel: 'noopener' }, t( 'openEditor' ) + ' ↗' ),
-				session.status === 'publish' ? el( 'a', { href: session.view_link, target: '_blank', rel: 'noopener' }, t( 'view' ) + ' ↗' ) : null
+				session.view_link ? el( 'a', { href: session.view_link, target: '_blank', rel: 'noopener' }, viewLabel( session.status ) + ' ↗' ) : null
 			) : ( props.postId ? null : el( 'span', { className: 'pedc-head-title' }, el( 'strong', {}, t( 'newStudy' ) ) ) )
 		);
 
@@ -596,7 +600,8 @@
 		var tools = el( Actions, {},
 			el( Btn, { variant: 'notes' === mode ? 'primary' : 'secondary', onClick: function () { setProp( null ); setMode( 'notes' === mode ? '' : 'notes' ); }, busy: p.busy }, t( 'organizeNotes' ) ),
 			el( Btn, { onClick: correct, busy: p.busy, busyKey: 'revise', disabled: s.words < 10 }, t( 'correct' ) ),
-			el( Btn, { href: s.edit_link, target: '_blank' }, t( 'openEditor' ) + ' ↗' )
+			el( Btn, { href: s.edit_link, target: '_blank' }, t( 'openEditor' ) + ' ↗' ),
+			s.view_link ? el( Btn, { href: s.view_link, target: '_blank' }, viewLabel( s.status ) + ' ↗' ) : null
 		);
 
 		if ( prop ) {
@@ -1000,7 +1005,7 @@
 					el( 'td', {}, tr ? el( Fragment, {}, tr.title, ' ', el( Status, { status: tr.status } ) ) : el( 'span', { className: 'pedc-muted' }, t( 'noTranslation' ) ) ),
 					el( 'td', { className: 'pedc-right' },
 						tr ? el( C.Button, { variant: 'link', href: tr.edit, target: '_blank' }, t( 'edit' ) ) : null, ' ',
-						tr && tr.view ? el( C.Button, { variant: 'link', href: tr.view, target: '_blank' }, t( 'view' ) ) : null, ' ',
+						tr && tr.view ? el( C.Button, { variant: 'link', href: tr.view, target: '_blank' }, viewLabel( tr.status ) ) : null, ' ',
 						el( Btn, { variant: tr ? 'secondary' : 'primary', onClick: function () { one( l.code ); }, busy: p.busy }, tr ? t( 'retranslate' ) : t( 'translateTo' ) )
 					)
 				);
@@ -1087,7 +1092,7 @@
 						cfg.wpml ? el( LangBadge, { code: d.lang } ) : null, ' ',
 						el( Status, { status: d.status } ), ' ',
 						'future' === d.status ? d.date.slice( 0, 16 ) + ' ' : '',
-						el( 'a', { href: d.view, target: '_blank', rel: 'noopener' }, t( 'view' ) )
+						el( 'a', { href: d.view, target: '_blank', rel: 'noopener' }, viewLabel( d.status ) )
 					);
 				} ) ) : null
 			)
