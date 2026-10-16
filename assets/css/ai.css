@@ -107,6 +107,16 @@
 .pedc-sections li { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 8px; }
 .pedc-sections small { display: block; color: #757575; }
 .pedc-sections li.is-todo small { color: #996800; font-weight: 600; }
+.pedc-h3--row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.pedc-secedit { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
+.pedc-secedit__list { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 10px; }
+.pedc-secedit__item small { display: block; margin-top: 2px; }
+.pedc-secedit__item.is-new .pedc-secedit__input { border-style: dashed; }
+.pedc-secedit__row { display: flex; align-items: center; gap: 2px; }
+.pedc-secedit__input { flex: 1 1 auto; min-width: 0; }
+.pedc-secedit__btn.components-button { min-width: 30px; height: 30px; padding: 0 6px; justify-content: center; font-size: 16px; }
+.pedc-secedit__confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; padding: 8px; background: #fcf0f1; border-radius: 4px; font-size: 13px; }
+.pedc-redo { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 10px; background: #fcf9e8; color: #996800; font-size: 12px; font-weight: 600; }
 
 /* Image */
 .pedc-image { width: 100%; height: auto; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 4px; border: 1px solid #dcdcde; }
