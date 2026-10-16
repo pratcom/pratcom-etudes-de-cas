@@ -41,6 +41,14 @@ function long_request(): void {
  * @return array|\WP_Error { text|data, model }
  */
 function ask( string $task, string $system, string $user, ?array $schema = null, int $max_tokens = 16000 ) {
+	/**
+	 * Short-circuit for tests: return [ 'data' => array, 'model' => string ]
+	 * (or [ 'text' => ... ] without schema) to skip the AI call.
+	 */
+	$pre = apply_filters( 'pedc_ai_pre_ask', null, $task, $system, $user, $schema );
+	if ( null !== $pre ) {
+		return $pre;
+	}
 	if ( ! function_exists( 'wp_ai_client_prompt' ) ) {
 		return new \WP_Error( 'pedc_ai_no_client', is_fr() ? 'Le client IA de WordPress n\'est pas disponible sur ce site.' : 'The WordPress AI Client is not available on this site.' );
 	}

@@ -8,6 +8,10 @@
  * images, videos, tables and other blocks are kept as-is, at their place.
  * Title, slug, client, website, logo and period are never touched. Nothing
  * is saved before "Apply"; WordPress keeps the old text in the revisions.
+ *
+ * With an "instruction" (Edit with instructions), the same pipeline applies
+ * only the author's changes (replace a figure, add or remove information,
+ * rename or add a section) and reports what it did and could not do.
  */
 
 namespace Pratcom\EtudesDeCas\AI;
@@ -254,6 +258,58 @@ function revise_system( string $lang ): string {
 		. ' Never use em-dashes or any long dash character; use commas, parentheses, colons or separate sentences instead, and a regular hyphen only inside compound words. Return your answer strictly using the provided JSON schema.';
 }
 
+/** JSON schema of an edit made from the author's instructions: the correction schema plus a report. */
+function instruct_schema(): array {
+	$schema                                = revise_schema();
+	$list                                  = [ 'type' => 'array', 'items' => [ 'type' => 'string' ] ];
+	$schema['properties']['changes']       = $list;
+	$schema['properties']['not_done']      = $list;
+	$schema['properties']['testimonial_author'] = [ 'type' => 'string' ];
+	$schema['required'][]                  = 'changes';
+	$schema['required'][]                  = 'not_done';
+	$schema['required'][]                  = 'testimonial_author';
+	return $schema;
+}
+
+function instruct_system( string $lang ): string {
+	return 'You edit an existing client case study (the story of a REAL project) by applying the author\'s instructions, and nothing else. You receive the case study as JSON (text blocks, excerpt, key results, client testimonial and its author) and the author\'s instructions. Keep the language of the case study (code: ' . $lang . '); if an instruction is written in another language or in rough notes, write the change properly in the language of the case study.'
+		. ' Scope rule: change only what the instructions ask: replace a figure or a word, add information, remove information, move or reword a passage, rename, add or remove a section. Every block, sentence and word the instructions do not touch is returned exactly as given, with the same inline HTML.'
+		. ' Facts rule: a case study reports what really happened. New facts, figures, names and quotes may come ONLY from the instructions. Never invent, never generalize, never fill a gap, never add marketing language. When you add information, write it as one or more short, plain sentences (or list items, if it goes into an existing list) in the section where it belongs, matching the tone of the text.'
+		. ' A changed fact must be changed everywhere it appears: in the text, the excerpt, the key results and the testimonial. When a removed or changed fact is the subject of a sentence, adjust or remove that sentence so the text stays correct and readable.'
+		. ' Placeholder rule: a paragraph whose only text is "À compléter" or "To complete" marks an empty section. When the instructions give content for that section, replace the placeholder with it; otherwise keep it.'
+		. ' Structure rules: level 2 headings are the sections of the case study. Keep each one, in the same order, with its "anchor" unchanged, unless the instructions rename, move, add or remove a section; a new level 2 heading has an empty "anchor". Level 3 headings are only used inside a section.'
+		. ' Inline HTML: text fields may contain <a>, <strong>, <em> and <br> tags; keep every <a> tag exactly as given around the same words, unless the instructions remove that passage.'
+		. ' Blocks of type "keep" are images, videos, tables or other elements: return every one of them exactly once, with the same "ref", at the same place, unless the instructions explicitly remove it.'
+		. ' "results": the key results of the project sheet; return them as given, changed only as the instructions say (a value may be changed, a row added or removed). "testimonial" and "testimonial_author": return them as given unless the instructions change them; an empty string means none. "excerpt": return it as given, except where it mentions a fact the instructions change.'
+		. ' The case study title is not part of what you edit.'
+		. ' "changes": one short line per change you made, in the language of the instructions (for example: Défi : ajouté « améliorer le référencement (SEO) »). "not_done": one short line per instruction, or part of one, that you could not apply because what it refers to is not in the case study, it is unclear, or it is the title; an empty array if everything was applied.'
+		. ' Never use em-dashes or any long dash character; use commas, parentheses, colons or separate sentences instead, and a regular hyphen only inside compound words. Return your answer strictly using the provided JSON schema.';
+}
+
+/** H2 anchors section-N renumbered in reading order; a custom anchor is kept. */
+function renumber_anchors( string $content ): string {
+	[ $intro, $groups ] = split_sections( $content );
+	if ( empty( $groups ) ) {
+		return $content;
+	}
+	$parts = [];
+	$head  = trim( serialize_blocks( $intro ) );
+	if ( '' !== $head ) {
+		$parts[] = $head;
+	}
+	$changed = false;
+	foreach ( $groups as $i => $group ) {
+		$current = heading_anchor( $group[0] );
+		$wanted  = is_auto_anchor( $current ) ? 'section-' . ( $i + 1 ) : $current;
+		if ( $wanted !== $current ) {
+			$group[0] = retitle_heading( $group[0], null, $wanted );
+			$changed  = true;
+		}
+		$parts[] = trim( serialize_blocks( $group ) );
+	}
+	return $changed ? implode( "\n\n", $parts ) : $content;
+}
+
 /**
  * Block markup from the corrected blocks.
  *
@@ -437,6 +493,14 @@ function handle_revise( \WP_REST_Request $request ) {
 		return new \WP_Error( 'pedc_ai_empty', is_fr() ? 'Cette étude n\'a pas de texte à corriger.' : 'This case study has no text to correct.', [ 'status' => 400 ] );
 	}
 
+	// With instructions, the AI applies the author's changes instead of correcting.
+	$instruction = trim( sanitize_textarea_field( (string) $request->get_param( 'instruction' ) ) );
+	$instruct    = '' !== $instruction;
+	if ( $instruct && mb_strlen( $instruction ) < 5 ) {
+		return new \WP_Error( 'pedc_ai_no_instruction', is_fr() ? 'Écris ce qu\'il faut changer (ex. : remplace 200 visites par 100).' : 'Write what to change (e.g. replace 200 visits with 100).', [ 'status' => 400 ] );
+	}
+	$instruction = mb_substr( $instruction, 0, 4000 );
+
 	$lang    = post_language( $post->ID );
 	$sheet   = \Pratcom\EtudesDeCas\sheet( $post );
 	$payload = [
@@ -445,9 +509,15 @@ function handle_revise( \WP_REST_Request $request ) {
 		'testimonial' => $sheet['testimonial'],
 		'blocks'      => array_values( $items ),
 	];
+	if ( $instruct ) {
+		$payload['testimonial_author'] = $sheet['testimonial_author'];
+	}
 	$user    = 'Case study title (do not change it, do not repeat it as a heading): ' . $post->post_title
-		. "\n\nCase study JSON:\n" . wp_json_encode( $payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES );
-	$answer  = ask( 'revise', revise_system( $lang ), $user, revise_schema() );
+		. "\n\nCase study JSON:\n" . wp_json_encode( $payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES )
+		. ( $instruct ? "\n\nAuthor's instructions:\n" . $instruction : '' );
+	$answer  = $instruct
+		? ask( 'revise', instruct_system( $lang ), $user, instruct_schema() )
+		: ask( 'revise', revise_system( $lang ), $user, revise_schema() );
 	if ( is_wp_error( $answer ) ) {
 		return $answer;
 	}
@@ -458,37 +528,69 @@ function handle_revise( \WP_REST_Request $request ) {
 
 	$built   = build_blocks( $data['blocks'], $reader->keeps, $lang );
 	$content = $built['content'];
+	if ( $instruct ) {
+		$content = renumber_anchors( $content );
+	}
 
 	$before_links = links_of( $old );
-	foreach ( array_diff_key( $before_links, links_of( $content ) ) as $href => $anchor ) {
-		$content = inject_link( $content, (string) $href, (string) $anchor );
+	// A correction never loses a link; an instruction may remove the passage that held it.
+	if ( ! $instruct ) {
+		foreach ( array_diff_key( $before_links, links_of( $content ) ) as $href => $anchor ) {
+			$content = inject_link( $content, (string) $href, (string) $anchor );
+		}
 	}
 	$missing = array_diff_key( $before_links, links_of( $content ) );
 
-	// Key results: same rows, values unchanged, labels corrected.
-	$results = [];
-	$given   = is_array( $data['results'] ?? null ) ? array_values( $data['results'] ) : [];
-	foreach ( $sheet['results'] as $i => $row ) {
-		$label     = isset( $given[ $i ]['label'] ) && '' !== trim( (string) $given[ $i ]['label'] ) ? (string) $given[ $i ]['label'] : $row['label'];
-		$results[] = [ 'value' => $row['value'], 'label' => sanitize_text_field( clean_text( $label, $lang ) ) ];
-	}
-	$testimonial = '' === $sheet['testimonial'] ? '' : sanitize_textarea_field( clean_text( (string) ( $data['testimonial'] ?? '' ), $lang ) );
-	if ( '' === $testimonial ) {
-		$testimonial = $sheet['testimonial'];
+	$author = $sheet['testimonial_author'];
+	if ( $instruct ) {
+		// Instructions may change, add or remove key results and the testimonial.
+		$results = [];
+		foreach ( is_array( $data['results'] ?? null ) ? $data['results'] : [] as $row ) {
+			if ( is_array( $row ) ) {
+				$results[] = [ 'value' => (string) ( $row['value'] ?? '' ), 'label' => clean_text( (string) ( $row['label'] ?? '' ), $lang ) ];
+			}
+		}
+		$results     = \Pratcom\EtudesDeCas\sanitize_results( $results );
+		$testimonial = sanitize_textarea_field( clean_text( (string) ( $data['testimonial'] ?? '' ), $lang ) );
+		$author      = '' === $testimonial ? '' : sanitize_text_field( clean_text( (string) ( $data['testimonial_author'] ?? '' ), $lang ) );
+	} else {
+		// Key results: same rows, values unchanged, labels corrected.
+		$results = [];
+		$given   = is_array( $data['results'] ?? null ) ? array_values( $data['results'] ) : [];
+		foreach ( $sheet['results'] as $i => $row ) {
+			$label     = isset( $given[ $i ]['label'] ) && '' !== trim( (string) $given[ $i ]['label'] ) ? (string) $given[ $i ]['label'] : $row['label'];
+			$results[] = [ 'value' => $row['value'], 'label' => sanitize_text_field( clean_text( $label, $lang ) ) ];
+		}
+		$testimonial = '' === $sheet['testimonial'] ? '' : sanitize_textarea_field( clean_text( (string) ( $data['testimonial'] ?? '' ), $lang ) );
+		if ( '' === $testimonial ) {
+			$testimonial = $sheet['testimonial'];
+		}
 	}
 	$excerpt = sanitize_textarea_field( clean_text( (string) ( $data['excerpt'] ?? '' ), $lang ) );
 	if ( '' === $excerpt ) {
 		$excerpt = (string) $post->post_excerpt;
 	}
+	$report = static function ( $lines ): array {
+		$out = [];
+		foreach ( is_array( $lines ) ? $lines : [] as $line ) {
+			$line = trim( sanitize_text_field( no_dashes( (string) $line ) ) );
+			if ( '' !== $line ) {
+				$out[] = $line;
+			}
+		}
+		return array_slice( $out, 0, 20 );
+	};
 
 	// update_post_meta() unslashes: slash first so the block JSON survives.
 	update_post_meta( $post->ID, META_PROPOSAL, wp_slash( [
-		'content'     => $content,
-		'excerpt'     => $excerpt,
-		'results'     => $results,
-		'testimonial' => $testimonial,
-		'modified'    => $post->post_modified_gmt,
-		'model'       => $answer['model'],
+		'content'            => $content,
+		'excerpt'            => $excerpt,
+		'results'            => $results,
+		'testimonial'        => $testimonial,
+		'testimonial_author' => $author,
+		'instruct'           => $instruct,
+		'modified'           => $post->post_modified_gmt,
+		'model'              => $answer['model'],
 	] ) );
 
 	$h2 = preg_match_all( '#<h2[\s>]#i', $content );
@@ -502,7 +604,10 @@ function handle_revise( \WP_REST_Request $request ) {
 		'excerpt'      => $excerpt,
 		'old_excerpt'  => (string) $post->post_excerpt,
 		'results'      => [ 'before' => $sheet['results'], 'after' => $results ],
-		'testimonial'  => [ 'before' => $sheet['testimonial'], 'after' => $testimonial ],
+		'testimonial'  => [ 'before' => $sheet['testimonial'], 'after' => $testimonial, 'author_before' => $sheet['testimonial_author'], 'author_after' => $author ],
+		'instruct'     => $instruct,
+		'changes'      => $instruct ? $report( $data['changes'] ?? [] ) : [],
+		'not_done'     => $instruct ? $report( $data['not_done'] ?? [] ) : [],
 		'model'        => $answer['model'],
 		'stats'        => [
 			'words_before'  => words( $old ),
@@ -543,11 +648,18 @@ function handle_revise_apply( \WP_REST_Request $request ) {
 	if ( is_wp_error( $updated ) ) {
 		return $updated;
 	}
-	if ( ! empty( $proposal['results'] ) ) {
-		update_post_meta( $post->ID, '_pedc_results', wp_slash( $proposal['results'] ) );
-	}
-	if ( '' !== (string) ( $proposal['testimonial'] ?? '' ) ) {
-		update_post_meta( $post->ID, '_pedc_testimonial', wp_slash( (string) $proposal['testimonial'] ) );
+	if ( ! empty( $proposal['instruct'] ) ) {
+		// Instructions may also empty the key results or the testimonial.
+		update_post_meta( $post->ID, '_pedc_results', wp_slash( (array) ( $proposal['results'] ?? [] ) ) );
+		update_post_meta( $post->ID, '_pedc_testimonial', wp_slash( (string) ( $proposal['testimonial'] ?? '' ) ) );
+		update_post_meta( $post->ID, '_pedc_testimonial_author', wp_slash( (string) ( $proposal['testimonial_author'] ?? '' ) ) );
+	} else {
+		if ( ! empty( $proposal['results'] ) ) {
+			update_post_meta( $post->ID, '_pedc_results', wp_slash( $proposal['results'] ) );
+		}
+		if ( '' !== (string) ( $proposal['testimonial'] ?? '' ) ) {
+			update_post_meta( $post->ID, '_pedc_testimonial', wp_slash( (string) $proposal['testimonial'] ) );
+		}
 	}
 	delete_post_meta( $post->ID, META_PROPOSAL );
 	update_post_meta( $post->ID, '_pedc_ai_revised', gmdate( 'Y-m-d H:i:s' ) );

@@ -531,6 +531,7 @@
 		var ex = useState( s.excerpt || '' ), excerpt = ex[ 0 ], setExcerpt = ex[ 1 ];
 		var md = useState( '' ), mode = md[ 0 ], setMode = md[ 1 ];
 		var nt = useState( '' ), notes = nt[ 0 ], setNotes = nt[ 1 ];
+		var ins = useState( '' ), instruction = ins[ 0 ], setInstruction = ins[ 1 ];
 		var pr = useState( null ), prop = pr[ 0 ], setProp = pr[ 1 ];
 		var px = useState( '' ), propExcerpt = px[ 0 ], setPropExcerpt = px[ 1 ];
 		// Sections being edited: [ { from, text } ] (from = index of an existing section, -1 = new), or null.
@@ -591,6 +592,15 @@
 				p.info( r.empty_sections.length ? t( 'notesReadyTodo' ) + ' ' + r.empty_sections.join( ', ' ) : t( 'notesReady' ), r.empty_sections.length ? 'warning' : 'success' );
 			} ).catch( p.fail ) );
 		}
+		function instruct() {
+			if ( instruction.trim().length < 5 ) { p.info( t( 'instructShort' ), 'error' ); return; }
+			setProp( null );
+			p.run( 'instruct', t( 'instructing' ), post( '/revise', { post_id: p.postId, instruction: instruction } ).then( function ( r ) {
+				setProp( { kind: 'revise', instruct: true, data: r } );
+				setPropExcerpt( r.excerpt || '' );
+				p.info( r.not_done && r.not_done.length ? t( 'instructPartial' ) : t( 'instructReady' ), r.not_done && r.not_done.length ? 'warning' : 'success' );
+			} ).catch( p.fail ) );
+		}
 		function correct() {
 			setProp( null );
 			setMode( 'correct' );
@@ -602,11 +612,13 @@
 		}
 		function apply() {
 			var kind = prop.kind;
+			var instructed = !! prop.instruct;
 			var path = 'notes' === kind ? '/notes/apply' : '/revise/apply';
 			p.run( 'apply', t( 'busy' ), post( path, { post_id: p.postId, excerpt: propExcerpt } ).then( function ( r ) {
 				setProp( null );
 				setMode( '' );
 				setNotes( '' );
+				setInstruction( '' );
 				if ( 'notes' === kind ) {
 					p.applySession( r, true );
 					var msg = t( 'notesApplied' );
@@ -616,7 +628,7 @@
 				}
 				// Correction: existing translations are redone from the corrected text.
 				var langs = r.translations || [];
-				var msgs = [ t( 'applied' ) ];
+				var msgs = [ instructed ? t( 'instructApplied' ) : t( 'applied' ) ];
 				var chain = Promise.resolve();
 				langs.forEach( function ( code ) {
 					chain = chain.then( function () {
@@ -643,6 +655,7 @@
 
 		var tools = el( Actions, {},
 			el( Btn, { variant: 'notes' === mode ? 'primary' : 'secondary', onClick: function () { setProp( null ); setMode( 'notes' === mode ? '' : 'notes' ); }, busy: p.busy }, t( 'organizeNotes' ) ),
+			el( Btn, { variant: 'instruct' === mode ? 'primary' : 'secondary', onClick: function () { setProp( null ); setMode( 'instruct' === mode ? '' : 'instruct' ); }, busy: p.busy, disabled: s.words < 3 }, t( 'instructBtn' ) ),
 			el( Btn, { onClick: correct, busy: p.busy, busyKey: 'revise', disabled: s.words < 10 }, t( 'correct' ) ),
 			el( Btn, { href: s.edit_link, target: '_blank' }, t( 'openEditor' ) + ' ↗' ),
 			s.view_link ? el( Btn, { href: s.view_link, target: '_blank' }, viewLabel( s.status ) + ' ↗' ) : null
@@ -660,6 +673,11 @@
 					d.stats.links_total ? el( 'li', {}, t( 'linksKept' ) + ' : ' + d.stats.links_kept + ' / ' + d.stats.links_total ) : null,
 					d.stats.keeps ? el( 'li', {}, t( 'mediaKept' ) + ' : ' + d.stats.keeps ) : null
 				) : null,
+				prop.instruct ? el( 'div', { className: 'pedc-box pedc-instruct-report' },
+					el( 'p', { className: 'pedc-help-plain' }, el( 'strong', {}, t( 'yourInstructions' ) ), ' ', instruction ),
+					d.changes && d.changes.length ? el( Fragment, {}, el( 'h4', {}, t( 'changesDone' ) ), el( 'ul', {}, d.changes.map( function ( c, i ) { return el( 'li', { key: i }, c ); } ) ) ) : null,
+					d.not_done && d.not_done.length ? el( C.Notice, { status: 'warning', isDismissible: false }, el( 'strong', {}, t( 'notDone' ) ), el( 'ul', {}, d.not_done.map( function ( c, i ) { return el( 'li', { key: i }, c ); } ) ) ) : null
+				) : null,
 				d.model ? el( 'p', { className: 'pedc-muted' }, t( 'model' ) + ' ' + d.model ) : null,
 				el( C.TextareaControl, { __nextHasNoMarginBottom: true, label: t( 'excerpt' ), help: t( 'excerptHelp' ), value: propExcerpt, rows: 3, onChange: setPropExcerpt } ),
 				el( Counter, { value: propExcerpt, min: 120, max: 350 } ),
@@ -676,8 +694,11 @@
 					el( 'p', { className: 'pedc-help-plain' }, d.fill_testimonial ? t( 'willFillTestimonial' ) : t( 'keepsTestimonial' ) ),
 					el( 'blockquote', { className: 'pedc-quote' }, d.testimonial, d.testimonial_author ? el( 'cite', {}, d.testimonial_author ) : null )
 				) : null,
-				'revise' === prop.kind && d.results.before.length ? el( 'div', {}, el( 'h3', { className: 'pedc-h3' }, t( 'results' ) ), el( Compare, { before: resultsTable( d.results.before ), after: resultsTable( d.results.after ) } ) ) : null,
-				'revise' === prop.kind && d.testimonial.before ? el( 'div', {}, el( 'h3', { className: 'pedc-h3' }, t( 'testimonial' ) ), el( Compare, { before: el( 'blockquote', { className: 'pedc-quote' }, d.testimonial.before ), after: el( 'blockquote', { className: 'pedc-quote' }, d.testimonial.after ) } ) ) : null,
+				'revise' === prop.kind && ( d.results.before.length || d.results.after.length ) ? el( 'div', {}, el( 'h3', { className: 'pedc-h3' }, t( 'results' ) ), el( Compare, { before: resultsTable( d.results.before ), after: resultsTable( d.results.after ) } ) ) : null,
+				'revise' === prop.kind && ( d.testimonial.before || d.testimonial.after ) ? el( 'div', {}, el( 'h3', { className: 'pedc-h3' }, t( 'testimonial' ) ), el( Compare, {
+					before: d.testimonial.before ? el( 'blockquote', { className: 'pedc-quote' }, d.testimonial.before, d.testimonial.author_before ? el( 'cite', {}, d.testimonial.author_before ) : null ) : el( 'p', { className: 'pedc-muted' }, '-' ),
+					after: d.testimonial.after ? el( 'blockquote', { className: 'pedc-quote' }, d.testimonial.after, d.testimonial.author_after ? el( 'cite', {}, d.testimonial.author_after ) : null ) : el( 'p', { className: 'pedc-muted' }, '-' )
+				} ) ) : null,
 				el( Actions, {},
 					el( Btn, { variant: 'primary', onClick: apply, busy: p.busy, busyKey: 'apply' }, t( 'apply' ) ),
 					el( Btn, { onClick: function () { setProp( null ); p.info( null ); }, busy: p.busy }, t( 'cancel' ) )
@@ -694,6 +715,12 @@
 					el( 'p', {}, t( 'notesIntro' ) ),
 					el( C.TextareaControl, { __nextHasNoMarginBottom: true, label: t( 'notesLabel' ), hideLabelFromVision: true, placeholder: t( 'notesPh' ), value: notes, rows: 12, onChange: setNotes } ),
 					el( Actions, {}, el( Btn, { variant: 'primary', onClick: organize, busy: p.busy, busyKey: 'notes' }, t( 'organize' ) ) )
+				) : null,
+				'instruct' === mode ? el( 'div', { className: 'pedc-box' },
+					el( 'h3', { className: 'pedc-h3' }, t( 'instructBtn' ) ),
+					el( 'p', {}, t( 'instructIntro' ) ),
+					el( C.TextareaControl, { __nextHasNoMarginBottom: true, label: t( 'instructBtn' ), hideLabelFromVision: true, placeholder: t( 'instructPh' ), value: instruction, rows: 6, onChange: setInstruction } ),
+					el( Actions, {}, el( Btn, { variant: 'primary', onClick: instruct, busy: p.busy, busyKey: 'instruct' }, t( 'instructGo' ) ) )
 				) : null,
 				el( 'h3', { className: 'pedc-h3' }, t( 'preview' ), el( 'span', { className: 'pedc-muted' }, ' · ' + s.words + ' ' + t( 'wordsLower' ) ) ),
 				el( Html, { html: s.content_html } )
