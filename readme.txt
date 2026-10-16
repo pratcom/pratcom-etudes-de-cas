@@ -3,7 +3,7 @@ Contributors: pratcom
 Requires at least: 6.7
 Tested up to: 7.1
 Requires PHP: 8.0
-Stable tag: 1.5.0
+Stable tag: 1.5.1
 License: GPLv2 or later
 
 Type de contenu « Études de cas », séparé des articles du blogue.
@@ -49,6 +49,9 @@ Le plugin se met à jour comme une extension de WordPress.org, à partir de la b
 La suppression de l'extension retire seulement ses réglages. Les études de cas, secteurs et services restent en base.
 
 == Changelog ==
+
+= 1.5.1 =
+* Onglet Texte : dès que l'étude a du texte, le premier bouton devient « Modifier avec une consigne » (ouvert d'office s'il reste une section « À compléter »). « Organiser mes notes » ne sert plus qu'au premier jet; ensuite il devient le lien « Tout refaire à partir de notes », avec un avertissement : il remplace tout le texte.
 
 = 1.5.0 =
 * Assistant, onglet Texte : « Modifier avec une consigne ». On écrit ce qu'il faut changer (ex. « remplace 200 visites par 100, ajoute comme défi : améliorer le SEO, retire les 100 clients ») ; Claude applique seulement ces changements au texte, à l'extrait, aux résultats clés et au témoignage, sans rien inventer, remplace un « À compléter » quand la consigne donne le contenu, et liste ce qu'il a changé et ce qu'il n'a pas pu appliquer. Avant / après, puis « Appliquer » ; les traductions existantes sont refaites comme après une correction.
