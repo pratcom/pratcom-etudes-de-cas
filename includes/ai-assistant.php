@@ -290,6 +290,7 @@ function session_payload( int $post_id ): array {
 	}
 
 	$translations = [];
+	$changed      = (string) get_post_meta( $post_id, META_SECTIONS, true );
 	foreach ( translations_of( $post_id ) as $code => $tid ) {
 		$tp = get_post( $tid );
 		if ( ! $tp ) {
@@ -302,8 +303,11 @@ function session_payload( int $post_id ): array {
 			'status' => $tp->post_status,
 			'edit'   => get_edit_post_link( $tid, 'raw' ),
 			'view'   => 'publish' === $tp->post_status ? get_permalink( $tid ) : get_preview_post_link( $tid ),
+			// Sections changed after this translation was made.
+			'stale'  => '' !== $changed && $changed > (string) get_post_meta( $tid, '_pedc_ai_translated', true ),
 		];
 	}
+	$stale = ! empty( array_filter( wp_list_pluck( $translations, 'stale' ) ) );
 
 	$image    = get_post_meta( $post_id, META_IMAGE, true );
 	$original = original_of( $post_id );
@@ -346,7 +350,7 @@ function session_payload( int $post_id ): array {
 			'image'     => (bool) $featured,
 			'links'     => (bool) get_post_meta( $post_id, META_LINKS, true ),
 			'seo'       => '' !== $seo['seo_title'] || '' !== $seo['meta_description'] || (bool) get_post_meta( $post_id, META_SEO, true ),
-			'translate' => ! empty( $translations ),
+			'translate' => ! empty( $translations ) && ! $stale,
 			'publish'   => in_array( $post->post_status, [ 'publish', 'future' ], true ),
 		],
 	];
@@ -690,6 +694,142 @@ function handle_notes_apply( \WP_REST_Request $request ) {
 
 	$payload           = session_payload( $post->ID );
 	$payload['filled'] = $filled;
+	return rest_ensure_response( $payload );
+}
+
+/* 2 bis. Sections: rename, move, delete, add (no AI) */
+
+/** When the sections were last changed here (GMT), to flag translations to redo. */
+const META_SECTIONS = '_pedc_ai_sections';
+
+/**
+ * A content cut at its H2: the blocks before the first H2, then one group
+ * per H2 (the heading and every block up to the next H2). Same order and
+ * count as h2_sections().
+ */
+function split_sections( string $content ): array {
+	$intro  = [];
+	$groups = [];
+	foreach ( parse_blocks( $content ) as $block ) {
+		if ( is_h2_block( $block ) ) {
+			$groups[] = [ $block ];
+		} elseif ( empty( $groups ) ) {
+			$intro[] = $block;
+		} else {
+			$groups[ count( $groups ) - 1 ][] = $block;
+		}
+	}
+	return [ $intro, $groups ];
+}
+
+/** Section anchors that follow the order: empty or section-N. Custom anchors are kept. */
+function is_auto_anchor( string $anchor ): bool {
+	return '' === $anchor || (bool) preg_match( '/^section-\d+$/', $anchor );
+}
+
+/** An H2 block with a new text (null: keep it) and anchor. */
+function retitle_heading( array $block, ?string $text, string $anchor ): array {
+	$html = (string) $block['innerHTML'];
+	if ( null !== $text ) {
+		$safe = htmlspecialchars( $text, ENT_NOQUOTES, 'UTF-8' );
+		$html = (string) preg_replace_callback( '#(<h2\b[^>]*>).*?(</h2>)#is', static function ( $m ) use ( $safe ) {
+			return $m[1] . $safe . $m[2];
+		}, $html, 1 );
+	}
+	if ( '' !== $anchor ) {
+		$html = (string) preg_replace_callback( '/<h2\b([^>]*)>/i', static function ( $m ) use ( $anchor ) {
+			$attrs = (string) preg_replace( '/\s+id\s*=\s*("[^"]*"|\'[^\']*\')/i', '', $m[1] );
+			return '<h2' . $attrs . ' id="' . esc_attr( $anchor ) . '">';
+		}, $html, 1 );
+		$block['attrs']['anchor'] = $anchor;
+	}
+	$block['innerHTML']    = $html;
+	$block['innerContent'] = [ $html ];
+	return $block;
+}
+
+/**
+ * POST /sections: save the list of sections as the author arranged it.
+ * sections: [ { from: index of an existing section, or -1 for a new one, text } ].
+ * An existing section moves with all its content; one left out is deleted;
+ * a new one gets "To complete". Anchors section-N follow the new order.
+ */
+function handle_sections( \WP_REST_Request $request ) {
+	$post = editable_study( $request->get_param( 'post_id' ) );
+	if ( is_wp_error( $post ) ) {
+		return $post;
+	}
+	$fr = is_fr();
+	if ( (string) $request->get_param( 'modified' ) !== (string) $post->post_modified_gmt ) {
+		return new \WP_Error( 'pedc_ai_changed', $fr ? 'L\'étude a été modifiée ailleurs entre-temps. Recharge la page et refais tes changements.' : 'The case study was changed elsewhere in the meantime. Reload the page and redo your changes.', [ 'status' => 409 ] );
+	}
+	$lang    = post_language( $post->ID );
+	$content = (string) $post->post_content;
+	$known   = h2_sections( $content )['sections'];
+	[ $intro, $groups ] = split_sections( $content );
+
+	$wanted = $request->get_param( 'sections' );
+	if ( ! is_array( $wanted ) || empty( $wanted ) ) {
+		return new \WP_Error( 'pedc_ai_no_sections', $fr ? 'Garde au moins une section.' : 'Keep at least one section.', [ 'status' => 400 ] );
+	}
+	$used  = [];
+	$items = [];
+	foreach ( array_values( $wanted ) as $w ) {
+		$from = isset( $w['from'] ) ? (int) $w['from'] : -1;
+		$raw  = trim( mb_substr( sanitize_text_field( (string) ( $w['text'] ?? '' ) ), 0, 200 ) );
+		$text = trim( clean_text( $raw, $lang ) );
+		if ( '' === $text ) {
+			return new \WP_Error( 'pedc_ai_empty_title', $fr ? 'Chaque section doit avoir un titre.' : 'Every section needs a title.', [ 'status' => 400 ] );
+		}
+		if ( $from >= 0 && ( ! isset( $groups[ $from ] ) || isset( $used[ $from ] ) ) ) {
+			return new \WP_Error( 'pedc_ai_bad_section', $fr ? 'Les sections ont changé. Recharge la page.' : 'The sections changed. Reload the page.', [ 'status' => 409 ] );
+		}
+		if ( $from >= 0 ) {
+			$used[ $from ] = true;
+		}
+		// Unchanged title (as shown in the list): the heading keeps its markup.
+		$same    = $from >= 0 && $raw === (string) ( $known[ $from ]['text'] ?? '' );
+		$items[] = [ 'from' => $from, 'text' => $text, 'same' => $same ];
+	}
+
+	$parts = [];
+	$head  = trim( serialize_blocks( $intro ) );
+	if ( '' !== $head ) {
+		$parts[] = $head;
+	}
+	foreach ( $items as $i => $item ) {
+		$auto = 'section-' . ( $i + 1 );
+		if ( $item['from'] < 0 ) {
+			$parts[] = get_comment_delimited_block_content( 'core/heading', [ 'anchor' => $auto ], "\n" . '<h2 class="wp-block-heading" id="' . esc_attr( $auto ) . '">' . htmlspecialchars( $item['text'], ENT_NOQUOTES, 'UTF-8' ) . '</h2>' . "\n" )
+				. "\n\n" . get_comment_delimited_block_content( 'core/paragraph', [], "\n" . '<p><strong>' . todo_label( $lang ) . '</strong></p>' . "\n" );
+			continue;
+		}
+		$group   = $groups[ $item['from'] ];
+		$current = heading_anchor( $group[0] );
+		$anchor  = is_auto_anchor( $current ) ? $auto : $current;
+		$rename  = ! $item['same'];
+		if ( $rename || $anchor !== $current ) {
+			$group[0] = retitle_heading( $group[0], $rename ? $item['text'] : null, $anchor );
+		}
+		$parts[] = trim( serialize_blocks( $group ) );
+	}
+	$new = implode( "\n\n", $parts );
+
+	if ( $new === trim( $content ) ) {
+		$payload                       = session_payload( $post->ID );
+		$payload['stale_translations'] = [];
+		return rest_ensure_response( $payload );
+	}
+	$updated = wp_update_post( wp_slash( [ 'ID' => $post->ID, 'post_content' => $new ] ), true );
+	if ( is_wp_error( $updated ) ) {
+		return $updated;
+	}
+	update_post_meta( $post->ID, META_SECTIONS, gmdate( 'Y-m-d H:i:s' ) );
+
+	$payload                       = session_payload( $post->ID );
+	$payload['stale_translations'] = array_values( wp_list_pluck( array_filter( $payload['translations'], static function ( $tr ) {
+		return ! empty( $tr['stale'] );
+	} ), 'lang' ) );
 	return rest_ensure_response( $payload );
 }
 

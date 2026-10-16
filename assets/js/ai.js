@@ -533,8 +533,52 @@
 		var nt = useState( '' ), notes = nt[ 0 ], setNotes = nt[ 1 ];
 		var pr = useState( null ), prop = pr[ 0 ], setProp = pr[ 1 ];
 		var px = useState( '' ), propExcerpt = px[ 0 ], setPropExcerpt = px[ 1 ];
+		// Sections being edited: [ { from, text } ] (from = index of an existing section, -1 = new), or null.
+		var se = useState( null ), secs = se[ 0 ], setSecs = se[ 1 ];
+		var rc = useState( -1 ), confirmAt = rc[ 0 ], setConfirmAt = rc[ 1 ];
 
 		useEffect( function () { setExcerpt( s.excerpt || '' ); }, [ s.post_id, s.excerpt ] );
+		useEffect( function () { setSecs( null ); setConfirmAt( -1 ); }, [ s.post_id ] );
+
+		function editSections() {
+			setConfirmAt( -1 );
+			setSecs( s.sections.map( function ( sec, i ) { return { from: i, text: sec.text || '' }; } ) );
+		}
+		function secSet( i, text ) {
+			setSecs( secs.map( function ( x, j ) { return j === i ? Object.assign( {}, x, { text: text } ) : x; } ) );
+		}
+		function secMove( i, dir ) {
+			var j = i + dir;
+			if ( j < 0 || j >= secs.length ) { return; }
+			var list = secs.slice();
+			var tmp = list[ i ]; list[ i ] = list[ j ]; list[ j ] = tmp;
+			setConfirmAt( -1 );
+			setSecs( list );
+		}
+		function secRemove( i, sure ) {
+			var x = secs[ i ];
+			var orig = x.from >= 0 ? s.sections[ x.from ] : null;
+			// A section that holds text asks first (inline, no browser dialog).
+			if ( ! sure && orig && orig.words > 0 ) { setConfirmAt( i ); return; }
+			setConfirmAt( -1 );
+			setSecs( secs.filter( function ( y, j ) { return j !== i; } ) );
+		}
+		function secAdd() {
+			setConfirmAt( -1 );
+			setSecs( secs.concat( [ { from: -1, text: '', key: 'n' + Date.now() } ] ) );
+		}
+		function saveSections() {
+			if ( ! secs.length || secs.some( function ( x ) { return ! x.text.trim(); } ) ) { p.info( t( 'emptyTitle' ), 'error' ); return; }
+			p.run( 'sections', t( 'busy' ), post( '/sections', { post_id: p.postId, modified: s.modified, sections: secs.map( function ( x ) { return { from: x.from, text: x.text }; } ) } ).then( function ( r ) {
+				setSecs( null );
+				setConfirmAt( -1 );
+				p.applySession( r, true );
+				var stale = r.stale_translations || [];
+				p.info( stale.length
+					? t( 'sectionsSaved' ) + ' ' + t( 'sectionsStale' ) + ' ' + stale.map( langName ).join( ', ' ) + ' ' + t( 'sectionsStaleWhere' )
+					: t( 'sectionsSaved' ), stale.length ? 'warning' : 'success' );
+			} ).catch( p.fail ) );
+		}
 		// A study without text opens on the notes.
 		useEffect( function () { if ( s.words < 30 && ! mode ) { setMode( 'notes' ); } }, [ s.post_id ] );
 
@@ -655,8 +699,42 @@
 				el( Html, { html: s.content_html } )
 			),
 			el( 'div', { className: 'pedc-col pedc-side' },
-				el( 'h3', { className: 'pedc-h3' }, t( 'sections' ) ),
-				s.sections.length ? el( 'ul', { className: 'pedc-sections' }, s.sections.map( function ( sec, i ) {
+				el( 'h3', { className: 'pedc-h3 pedc-h3--row' }, t( 'sections' ),
+					! secs ? el( C.Button, { variant: 'link', onClick: editSections, disabled: !! p.busy }, t( 'editSections' ) ) : null
+				),
+				secs ? el( 'div', { className: 'pedc-secedit' },
+					el( 'p', { className: 'pedc-help-plain' }, t( 'sectionsHelp' ) ),
+					el( 'ol', { className: 'pedc-secedit__list' }, secs.map( function ( x, i ) {
+						var orig = x.from >= 0 ? s.sections[ x.from ] : null;
+						return el( 'li', { key: x.key || 'o' + x.from, className: 'pedc-secedit__item' + ( x.from < 0 ? ' is-new' : '' ) },
+							el( 'div', { className: 'pedc-secedit__row' },
+								el( 'input', {
+									type: 'text',
+									className: 'pedc-secedit__input',
+									value: x.text,
+									'aria-label': t( 'sectionTitle' ),
+									placeholder: t( 'sectionTitle' ),
+									maxLength: 200,
+									onChange: function ( e ) { secSet( i, e.target.value ); }
+								} ),
+								el( C.Button, { className: 'pedc-secedit__btn', label: t( 'moveUp' ), showTooltip: true, disabled: 0 === i || !! p.busy, onClick: function () { secMove( i, -1 ); } }, '↑' ),
+								el( C.Button, { className: 'pedc-secedit__btn', label: t( 'moveDown' ), showTooltip: true, disabled: i === secs.length - 1 || !! p.busy, onClick: function () { secMove( i, 1 ); } }, '↓' ),
+								el( C.Button, { className: 'pedc-secedit__btn', label: t( 'removeSection' ), showTooltip: true, isDestructive: true, disabled: secs.length < 2 || !! p.busy, onClick: function () { secRemove( i, false ); } }, '×' )
+							),
+							el( 'small', { className: 'pedc-muted' }, orig ? ( orig.words > 0 && ! orig.todo ? orig.words + ' ' + t( 'wordsLower' ) : t( 'toComplete' ) ) : t( 'toComplete' ) ),
+							confirmAt === i ? el( 'div', { className: 'pedc-secedit__confirm' },
+								el( 'span', {}, t( 'removeConf' ) ),
+								el( C.Button, { variant: 'primary', isDestructive: true, onClick: function () { secRemove( i, true ); } }, t( 'remove' ) ),
+								el( C.Button, { variant: 'tertiary', onClick: function () { setConfirmAt( -1 ); } }, t( 'keep' ) )
+							) : null
+						);
+					} ) ),
+					el( C.Button, { variant: 'secondary', onClick: secAdd, disabled: !! p.busy }, t( 'addSection' ) ),
+					el( Actions, {},
+						el( Btn, { variant: 'primary', onClick: saveSections, busy: p.busy, busyKey: 'sections' }, t( 'saveSections' ) ),
+						el( Btn, { onClick: function () { setSecs( null ); setConfirmAt( -1 ); }, busy: p.busy }, t( 'cancel' ) )
+					)
+				) : s.sections.length ? el( 'ul', { className: 'pedc-sections' }, s.sections.map( function ( sec, i ) {
 					var ok = sec.words > 0 && ! sec.todo;
 					return el( 'li', { key: i, className: ok ? 'is-ok' : 'is-todo' },
 						el( 'span', { className: 'pedc-check-icon' }, ok ? '✓' : '!' ),
@@ -1002,11 +1080,11 @@
 				var tr = existing[ l.code ];
 				return el( 'tr', { key: l.code },
 					el( 'td', {}, el( LangBadge, { code: l.code } ), ' ', el( 'strong', {}, l.name ) ),
-					el( 'td', {}, tr ? el( Fragment, {}, tr.title, ' ', el( Status, { status: tr.status } ) ) : el( 'span', { className: 'pedc-muted' }, t( 'noTranslation' ) ) ),
+					el( 'td', {}, tr ? el( Fragment, {}, tr.title, ' ', el( Status, { status: tr.status } ), tr.stale ? el( 'span', { className: 'pedc-redo' }, t( 'toRedo' ) ) : null ) : el( 'span', { className: 'pedc-muted' }, t( 'noTranslation' ) ) ),
 					el( 'td', { className: 'pedc-right' },
 						tr ? el( C.Button, { variant: 'link', href: tr.edit, target: '_blank' }, t( 'edit' ) ) : null, ' ',
 						tr && tr.view ? el( C.Button, { variant: 'link', href: tr.view, target: '_blank' }, viewLabel( tr.status ) ) : null, ' ',
-						el( Btn, { variant: tr ? 'secondary' : 'primary', onClick: function () { one( l.code ); }, busy: p.busy }, tr ? t( 'retranslate' ) : t( 'translateTo' ) )
+						el( Btn, { variant: tr && ! tr.stale ? 'secondary' : 'primary', onClick: function () { one( l.code ); }, busy: p.busy }, tr ? t( 'retranslate' ) : t( 'translateTo' ) )
 					)
 				);
 			} ) ) ),
