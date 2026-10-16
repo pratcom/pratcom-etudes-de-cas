@@ -116,6 +116,10 @@
 .pedc-secedit__input { flex: 1 1 auto; min-width: 0; }
 .pedc-secedit__btn.components-button { min-width: 30px; height: 30px; padding: 0 6px; justify-content: center; font-size: 16px; }
 .pedc-secedit__confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; padding: 8px; background: #fcf0f1; border-radius: 4px; font-size: 13px; }
+.pedc-instruct-report h4 { margin: 10px 0 6px; }
+.pedc-instruct-report ul { margin: 0 0 0 18px; list-style: disc; }
+.pedc-instruct-report .components-notice { margin: 10px 0 0; }
+.pedc-instruct-report .components-notice ul { margin-top: 4px; }
 .pedc-redo { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 10px; background: #fcf9e8; color: #996800; font-size: 12px; font-weight: 600; }
 
 /* Image */
