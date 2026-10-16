@@ -3,7 +3,7 @@ Contributors: pratcom
 Requires at least: 6.7
 Tested up to: 7.1
 Requires PHP: 8.0
-Stable tag: 1.4.0
+Stable tag: 1.5.0
 License: GPLv2 or later
 
 Type de contenu « Études de cas », séparé des articles du blogue.
@@ -49,6 +49,10 @@ Le plugin se met à jour comme une extension de WordPress.org, à partir de la b
 La suppression de l'extension retire seulement ses réglages. Les études de cas, secteurs et services restent en base.
 
 == Changelog ==
+
+= 1.5.0 =
+* Assistant, onglet Texte : « Modifier avec une consigne ». On écrit ce qu'il faut changer (ex. « remplace 200 visites par 100, ajoute comme défi : améliorer le SEO, retire les 100 clients ») ; Claude applique seulement ces changements au texte, à l'extrait, aux résultats clés et au témoignage, sans rien inventer, remplace un « À compléter » quand la consigne donne le contenu, et liste ce qu'il a changé et ce qu'il n'a pas pu appliquer. Avant / après, puis « Appliquer » ; les traductions existantes sont refaites comme après une correction.
+* Filtre pedc_ai_pre_ask (tests : remplace l'appel à l'IA).
 
 = 1.4.0 =
 * Assistant, onglet Texte : « Modifier les sections ». Renommer un titre de section, la monter ou la descendre (son contenu suit), la supprimer (confirmation si elle contient du texte) ou en ajouter une (marquée « À compléter »). Les ancres section-N suivent le nouvel ordre ; une ancre personnalisée est gardée. Aucun appel à l'IA.
