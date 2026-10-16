@@ -580,8 +580,14 @@
 					: t( 'sectionsSaved' ), stale.length ? 'warning' : 'success' );
 			} ).catch( p.fail ) );
 		}
-		// A study without text opens on the notes.
-		useEffect( function () { if ( s.words < 30 && ! mode ) { setMode( 'notes' ); } }, [ s.post_id ] );
+		// Without text, the study opens on the notes (first draft). With text,
+		// changes go through instructions; the notes only start over.
+		var hasText = s.words > 0;
+		var hasTodo = s.sections.some( function ( sec ) { return sec.todo || ! sec.words; } );
+		useEffect( function () {
+			if ( mode ) { return; }
+			if ( ! hasText ) { setMode( 'notes' ); } else if ( hasTodo ) { setMode( 'instruct' ); }
+		}, [ s.post_id ] );
 
 		function organize() {
 			if ( notes.trim().length < 40 ) { p.info( t( 'notesShort' ), 'error' ); return; }
@@ -653,12 +659,17 @@
 			} );
 		}
 
+		function toggle( m ) {
+			return function () { setProp( null ); setMode( m === mode ? '' : m ); };
+		}
 		var tools = el( Actions, {},
-			el( Btn, { variant: 'notes' === mode ? 'primary' : 'secondary', onClick: function () { setProp( null ); setMode( 'notes' === mode ? '' : 'notes' ); }, busy: p.busy }, t( 'organizeNotes' ) ),
-			el( Btn, { variant: 'instruct' === mode ? 'primary' : 'secondary', onClick: function () { setProp( null ); setMode( 'instruct' === mode ? '' : 'instruct' ); }, busy: p.busy, disabled: s.words < 3 }, t( 'instructBtn' ) ),
+			hasText
+				? el( Btn, { variant: 'instruct' === mode ? 'primary' : 'secondary', onClick: toggle( 'instruct' ), busy: p.busy }, t( 'instructBtn' ) )
+				: el( Btn, { variant: 'notes' === mode ? 'primary' : 'secondary', onClick: toggle( 'notes' ), busy: p.busy }, t( 'organizeNotes' ) ),
 			el( Btn, { onClick: correct, busy: p.busy, busyKey: 'revise', disabled: s.words < 10 }, t( 'correct' ) ),
 			el( Btn, { href: s.edit_link, target: '_blank' }, t( 'openEditor' ) + ' ↗' ),
-			s.view_link ? el( Btn, { href: s.view_link, target: '_blank' }, viewLabel( s.status ) + ' ↗' ) : null
+			s.view_link ? el( Btn, { href: s.view_link, target: '_blank' }, viewLabel( s.status ) + ' ↗' ) : null,
+			hasText ? el( C.Button, { variant: 'link', className: 'pedc-restart', onClick: toggle( 'notes' ), disabled: !! p.busy }, t( 'restartNotes' ) ) : null
 		);
 
 		if ( prop ) {
@@ -710,11 +721,12 @@
 		return el( 'div', { className: 'pedc-grid' },
 			el( 'div', { className: 'pedc-col' },
 				tools,
-				'notes' === mode ? el( 'div', { className: 'pedc-box' },
-					el( 'h3', { className: 'pedc-h3' }, t( 'organizeNotes' ) ),
+				'notes' === mode ? el( 'div', { className: 'pedc-box' + ( hasText ? ' is-restart' : '' ) },
+					el( 'h3', { className: 'pedc-h3' }, hasText ? t( 'restartNotes' ) : t( 'organizeNotes' ) ),
+					hasText ? el( C.Notice, { status: 'warning', isDismissible: false }, t( 'restartIntro' ) ) : null,
 					el( 'p', {}, t( 'notesIntro' ) ),
 					el( C.TextareaControl, { __nextHasNoMarginBottom: true, label: t( 'notesLabel' ), hideLabelFromVision: true, placeholder: t( 'notesPh' ), value: notes, rows: 12, onChange: setNotes } ),
-					el( Actions, {}, el( Btn, { variant: 'primary', onClick: organize, busy: p.busy, busyKey: 'notes' }, t( 'organize' ) ) )
+					el( Actions, {}, el( Btn, { variant: 'primary', onClick: organize, busy: p.busy, busyKey: 'notes' }, hasText ? t( 'restartGo' ) : t( 'organize' ) ) )
 				) : null,
 				'instruct' === mode ? el( 'div', { className: 'pedc-box' },
 					el( 'h3', { className: 'pedc-h3' }, t( 'instructBtn' ) ),
