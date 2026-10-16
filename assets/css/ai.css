@@ -120,6 +120,8 @@
 .pedc-instruct-report ul { margin: 0 0 0 18px; list-style: disc; }
 .pedc-instruct-report .components-notice { margin: 10px 0 0; }
 .pedc-instruct-report .components-notice ul { margin-top: 4px; }
+.pedc-actions .pedc-restart.components-button { margin-left: auto; color: #b32d2e; }
+.pedc-box.is-restart .components-notice { margin: 0 0 12px; }
 .pedc-redo { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 10px; background: #fcf9e8; color: #996800; font-size: 12px; font-weight: 600; }
 
 /* Image */
